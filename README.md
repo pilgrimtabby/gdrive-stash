@@ -1,2 +1,8 @@
 # gdrive-stash
-Stash files and directories in Google Drive from the command line
+
+To-do
+
+- add help command /readme
+- syntax checking, editing, documentation
+- test more
+- optimizations (binary search)
