@@ -35,21 +35,33 @@ Tells function to recursively back up subdirectories in $srcDir.
 Default is $false. Alias is "-r".
 
 .EXAMPLE
-Backup-Dir "C:\foo\bar\mystuff" "\"
+gdrive-stash "C:\foo\bar\mystuff" "\"
 Result: All files in "mystuff" are copied into Google Drive's root directory,
 excluding subdirectories.
 
 .EXAMPLE
-Backup-Dir "C:\foo\bar\mystuff" "\mybackups"
+gdrive-stash "C:\foo\bar\mystuff" "\mybackups"
 Result: All files in "mystuff", excluding subdirectories, are copied into
 "mybackups", which resides in Google Drive's root directory. If "mybackups"
 doesn't exist, the script will exit.
 
 .EXAMPLE
-Backup-Dir "C:\foo\bar\mystuff" "\mybackups\todays-date" -p
-Result: Result: All files in "mystuff", excluding subdirectories, are copied
+gdrive-stash "C:\foo\bar\mystuff" "\mybackups\todays-date" -p
+Result: All files in "mystuff", excluding subdirectories, are copied
 into "mybackups\todays-date", which resides in Google Drive's root directory.
 If either of those directories doesn't exist, they will be created.
+
+.EXAMPLE
+gdrive-stash "C:\foo\bar\mystuff" "\mybackups" -r
+Result: All files in "mystuff", including subdirectories, are recursively
+copied into "mybackups", which resides in Google Drive's root directory.
+
+.EXAMPLE
+gdrive-stash "C:\foo\bar\mystuff" "1Fn7xLIHE_iIY8o5MHbjQaAX20PdnE0ZD" -r -i
+Result: All files in "mystuff", including subdirectories, are recursively
+copied into the directory with Google Drive ID 1Fn7xLIHE_iIY8o5MHbjQaAX20PdnE0ZD.
+This is much faster than having to crawl through an entire directory path, but
+it may not be worth the effort...
 #>
 param (
     [Parameter(Mandatory=$true)][string]$srcDir,
