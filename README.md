@@ -1,10 +1,10 @@
 # gdrive-stash
 
-Quickly and easily up local files and directories to your Google Drive from the command line.
+Quickly and easily upload local files and directories to your Google Drive from the command line.
 
 # About
 
-gdrive-stash is a simple script intended as an addon for [glotlabs' gdrive](https://github.com/glotlabs/gdrive?tab=MIT-1-ov-file). Specify a local directory and a destination Google Drive path, and the script takes care of the rest. It saves time by only uploading files that have been overwritten since their  last backup, so runtime is generally pretty good unless you have a lot of files.
+gdrive-stash is a simple script intended as an addon for [glotlabs' gdrive](https://github.com/glotlabs/gdrive). Specify a local directory and a destination Google Drive path, and the script takes care of the rest. It saves time by only uploading files that have been overwritten since their  last backup, so runtime is generally pretty good unless you have a lot of files.
 
 # Usage
 
