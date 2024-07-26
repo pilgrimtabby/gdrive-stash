@@ -37,10 +37,10 @@ Command line args:
         Files inside srcDir will be copied directly inside destDir. Using an ID
         is faster but the full path is easier to obtain. Required.
         
-        Paths begin with "\" (forward slashes are converted to backslashes in
-        resolve_drive_dir_id). Passing "\" will copy the files in srcDir into
+        Paths begin with "/" (backslashes are converted to forward slashes in
+        resolve_drive_dir_id). Passing "/" will copy the files in srcDir into
         Google Drive's root directory. To copy files into a folder called "My
-        Backups" in your drive's root, you would pass destDir as "\My Backups".
+        Backups" in your drive's root, you would pass destDir as "/My Backups".
 
     recursive (bool): Tells function to recursively back up subdirectories in
         src_dir. Default is False. Optional.
@@ -54,25 +54,25 @@ Command line args:
         ID, not a pathname. Default is False. Optional.
 
 Usage examples:
-    gdrive-stash "C:\foo\bar\mystuff" "\"
+    gdrive-stash "/foo/bar/mystuff" "/"
     Result: All files in "mystuff" are copied into Google Drive's root dir,
     excluding subdirectories.
 
-    gdrive-stash "C:\foo\bar\mystuff" "\mybackups"
+    gdrive-stash "/foo/bar/mystuff" "/mybackups"
     Result: All files in "mystuff", excluding subdirectories, are copied into
     "mybackups", which resides in Google Drive's root directory. If "mybackups"
     doesn't exist, the script will exit.
 
-    gdrive-stash "C:\foo\bar\mystuff" "\mybackups\todays-date" -p
+    gdrive-stash "/foo/bar/mystuff" "/mybackups/todays-date" -p
     Result: All files in "mystuff", excluding subdirectories, are copied
-    into "mybackups\todays-date", which resides in Google Drive's root dir.
+    into "mybackups/todays-date", which resides in Google Drive's root dir.
     If either of those directories doesn't exist, they will be created.
 
-    gdrive-stash "C:\foo\bar\mystuff" "\mybackups" -r
+    gdrive-stash "/foo/bar/mystuff" "/mybackups" -r
     Result: All files in "mystuff", including subdirectories, are recursively
     copied into "mybackups", which resides in Google Drive's root directory.
 
-    gdrive-stash "C:\foo\bar\mystuff" "1Fn7xLIHE_iIY8o5MHbjQaAX20PdnE0ZD" -r -i
+    gdrive-stash "/foo/bar/mystuff" "1Fn7xLIHE_iIY8o5MHbjQaAX20PdnE0ZD" -r -i
     Result: All files in "mystuff", including subdirectories, are recursively
     copied into the dir with Google Drive ID 1Fn7xLIHE_iIY8o5MHbjQaAX20PdnE0ZD.
     This is much faster than having to crawl through an entire directory path,
@@ -292,7 +292,7 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
     curr_dir_id = None
     curr_dir_count = 1
     # Standardize slash direction and remove leading and trailing slashes
-    dirs_in_path = dest_dir.replace("/", "\\").strip("\\").split("\\")
+    dirs_in_path = dest_dir.replace("\\", "/").strip("/").split("/")
 
     # Special case -- user requested root dir as dest_dir
     if dirs_in_path == [""]:
@@ -531,4 +531,7 @@ parser.add_argument("src_dir", type=str)
 parser.add_argument("dest_dir", type=str)
 
 args = parser.parse_args()
+args.src_dir = args.src_dir.replace("\\", "/")
+args.dest_dir = args.dest_dir.replace("\\", "/")
+
 back_up_dir(args.src_dir, args.dest_dir, args.r, args.p, args.i)
