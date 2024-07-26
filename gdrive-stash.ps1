@@ -45,18 +45,18 @@ DriveDirId). Passing "\" will copy the files in srcDir into Google Drive's root
 directory. If you want to copy files into a folder called "My Backups" in your
 drive's root, you would pass destDir as "\My Backups".
 
-.PARAMETER destDirIsId
-Tells function to treat $dest as a Google Drive ID, not a pathname.
-Default is $false. Alias is "-i".
+.PARAMETER recursive
+Tells function to recursively back up subdirectories in $srcDir.
+Default is $false. Alias is "-r".
 
 .PARAMETER makeParents
 When enabled, tells Resolve-DriveDirId to create any directories in $destDir's
 path that don't already exist. If this is disabled and $destDir doesn't exist,
 the script will exit. Alias is "-p".
 
-.PARAMETER recursive
-Tells function to recursively back up subdirectories in $srcDir.
-Default is $false. Alias is "-r".
+.PARAMETER destDirIsId
+Tells function to treat $destDir as a Google Drive ID, not a pathname.
+Default is $false. Alias is "-i".
 
 .EXAMPLE
 gdrive-stash "C:\foo\bar\mystuff" "\"
@@ -139,7 +139,8 @@ function Backup-Dir {
 
     # Get list of files in $destDir
     $destFiles = $(Get-DriveFileList $destId)
-    # It's rtyring to make dest files with dest id
+
+    # Iterate through files
     foreach ($filename in $srcFiles) {
         $fileType = $(Test-IsDir $srcDir $filename)
         $fileId, $driveFileCreateTime = $(Get-DriveFileInfo $filename $fileType $destFiles)
@@ -207,7 +208,7 @@ function Get-DriveFileList {
     used in a filename, and it uses a forbidden filename character for both 
     Windows ("?") and MacOS (":").
 
-    .PARAMETER destDir
+    .PARAMETER destId
     The directory holding the files that will be listed.
 
     .OUTPUTS
@@ -244,9 +245,9 @@ function Get-DriveFileInfo {
 
     .DESCRIPTION
     Make a case-sensitive search in a Google Drive directory for a file with a
-    given filename and type. If a match isn't found, return two "" values.
-    Possible file types are directory and file (see enum FileType). Case
-    sensitivity is used because Google Drive files are case-sensitive.
+    given filename and type (Google Drive files aren't case sensitive, but
+    local files generally are). Possible file types are directory and file (see
+    enum FileType).
 
     .PARAMETER filename
     The name of the file to search for.
@@ -264,7 +265,7 @@ function Get-DriveFileInfo {
     -File size (for directories, this is blank)
     -Date and time file was created
 
-    If a null value is passed for this parameter, the foreach loop is skipped.
+    If an empty string is passed for this parameter, the loop is skipped.
 
     .OUTPUTS
     [string]: Google Drive ID of the file. Blank if no match found.
@@ -376,12 +377,13 @@ function Backup-File {
     .DESCRIPTION
     If a file already exists in the directory at $destId, we check if its last
     write time is more recent than the Drive file's creation time. If so, we
-    know it's different, so we delete the file from Drive and re-upload it.
+    know it has been modified, so we delete and re-upload it.
 
     Deleting and re-uploading is only marginally slower than simply updating,
     and it allows us to reset the Drive file's creation date, since that value
     is set to be the time of upload. This lets us compare that time with the
-    local write time to see if changes have been made.
+    local write time later on to see if changes have been made (it's much more
+    difficult to access Drive files' most recent write date).
 
     If a file doesn't exist in the dir at $destId yet, then upload it.
 
