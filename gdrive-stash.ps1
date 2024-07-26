@@ -329,6 +329,11 @@ function Resolve-DriveDirId {
     # Standardize slashes, remove them from ends to simplify splitting
     $dirsInPath = $destDir.Replace("/", "\").TrimStart("\").TrimEnd("\").Split("\")
 
+    # Special case -- user requested root dir as $destDir
+    if ([string]::IsNullOrEmpty($dirsInPath)) {
+        return $(Get-RootId)
+    }
+    
     for ($i=0; $i -lt $dirsInPath.Length; $i++) {
         $nextDir = $dirsInPath[$i]
         # We only use the first return value ($destId)
@@ -425,6 +430,27 @@ function Backup-File {
     } else {
         gdrive files upload --parent $destId "$srcDir\$filename"
     }
+}
+
+
+function Get-RootId {
+<#
+    .SYNOPSIS
+    Return the Google Drive ID of the Drive root directory.
+
+    .DESCRIPTION
+    There's no way to access the root Drive ID directly, so we create a tmp dir
+    in the root, access its parent ID, then delete the temporary directory.
+
+    .OUTPUTS
+    [string]: The root directory's Google Drive ID.
+#>
+    $tmpDirId = $(gdrive files mkdir tmp --print-only-id)
+    $tmpDirInfo = $((gdrive files info $tmpDirId) -split "`n`r")
+    $rootId = $($($tmpDirInfo | findstr "Parents:") -split "Parents: ", 0, "simplematch")[1]
+    # If we don't pass output to Out-Null, it screws up the return value
+    gdrive files delete --recursive $tmpDirId | Out-Null
+    return $rootId
 }
 
 
