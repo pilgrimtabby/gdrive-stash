@@ -534,7 +534,9 @@ args = parser.parse_args()
 args.src_dir = args.src_dir.replace("\\", "/")
 args.dest_dir = args.dest_dir.replace("\\", "/")
 
-# Handle it when user passes "\" as dest_dir
+# Handle it when user passes "\" as an argument
+if args.src_dir == '"':
+    args.src_dir = "/"
 if args.dest_dir == '"':
     args.dest_dir = "/"
 
