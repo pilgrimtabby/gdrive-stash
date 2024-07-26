@@ -292,7 +292,7 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
     curr_dir_id = None
     curr_dir_count = 1
     # Standardize slash direction and remove leading and trailing slashes
-    dirs_in_path = dest_dir.replace("\\", "/").strip("/").split("/")
+    dirs_in_path = dest_dir.strip("/").split("/")
 
     # Special case -- user requested root dir as dest_dir
     if dirs_in_path == [""]:
@@ -533,5 +533,9 @@ parser.add_argument("dest_dir", type=str)
 args = parser.parse_args()
 args.src_dir = args.src_dir.replace("\\", "/")
 args.dest_dir = args.dest_dir.replace("\\", "/")
+
+# Handle it when user passes "\" as dest_dir
+if args.dest_dir == '"':
+    args.dest_dir = "/"
 
 back_up_dir(args.src_dir, args.dest_dir, args.r, args.p, args.i)
