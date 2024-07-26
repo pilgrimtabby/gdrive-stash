@@ -99,11 +99,18 @@ from typing import Union
 
 class FileType(Enum):
     """Categorize a file into one of two types: non-dir file or dir."""
+
     DIR = auto()
     FILE = auto()
 
 
-def back_up_dir(src_dir: str, dest_dir: str, recursive: bool, make_parents: bool, dest_dir_is_id: bool) -> None:
+def back_up_dir(
+    src_dir: str,
+    dest_dir: str,
+    recursive: bool,
+    make_parents: bool,
+    dest_dir_is_id: bool,
+) -> None:
     """Back up a directory (and optionally, its subdirectories) to Google Drive.
 
     Iterates through all non-directory files, calling back_up_file on each one.
@@ -125,7 +132,9 @@ def back_up_dir(src_dir: str, dest_dir: str, recursive: bool, make_parents: bool
     # Iterate through files
     for filename in src_files:
         file_type = get_file_type(src_dir, filename)
-        file_id, drive_file_create_time = get_drive_file_info(filename, file_type, dest_files)
+        file_id, drive_file_create_time = get_drive_file_info(
+            filename, file_type, dest_files
+        )
 
         # Either skip or recursively dive into directories, depending on -r
         if recursive and file_type == FileType.DIR:
@@ -148,7 +157,7 @@ def back_up_dir(src_dir: str, dest_dir: str, recursive: bool, make_parents: bool
             # Subdir exists in Google Drive
             else:
                 new_dest_id = file_id
-            
+
             new_src = f"{src_dir}/{filename}"
             back_up_dir(new_src, new_dest_id, True, make_parents, True)
 
@@ -168,7 +177,7 @@ def get_local_files(src_dir: str) -> list[str]:
     """
     try:
         return os.listdir(src_dir)
-    
+
     # Folder doesn't exist
     except FileNotFoundError:
         sys.exit(f"Error: directory {src_dir} does not exist")
@@ -186,7 +195,7 @@ def get_drive_file_list(dest_id: str | None) -> list[str]:
 
     The delimiter ":DELIMITER?" separates discreet pieces of information in
     each entry in the array. This string is used because it's unlikely to be
-    used in a filename, and it uses a forbidden filename character for both 
+    used in a filename, and it uses a forbidden filename character for both
     Windows ("?") and MacOS (":").
 
     Args:
@@ -208,7 +217,7 @@ def get_drive_file_list(dest_id: str | None) -> list[str]:
         if dest_id is not None:  # Not listing files in Google Drive's root
             gdrive_args += ["--parent", dest_id]
         return subprocess.check_output(gdrive_args).decode().strip().split("\n")
-    
+
     # Returned if dest_id doesn't point to a valid Google Drive directory
     except subprocess.CalledProcessError:
         sys.exit(f"Error: directory with ID {dest_id} not found")
@@ -236,7 +245,6 @@ def get_drive_file_info(
         file_create_time (datetime | None): The time and date the Google Drive
             file was created (in the machine's time zone). None if the file
             doesn't exist.
-        
     """
     if drive_files == [""]:  # Empty directory
         return None, None
@@ -319,7 +327,9 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
                 "--parent",
                 next_dir_id,
             ]
-            next_file_list = subprocess.check_output(gdrive_args).decode().strip().split("\n")
+            next_file_list = (
+                subprocess.check_output(gdrive_args).decode().strip().split("\n")
+            )
 
         # Next directory doesn't exist
         elif make_parents:
@@ -331,10 +341,10 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
                     "files",
                     "mkdir",
                     "--print-only-id",
-                    next_dir
+                    next_dir,
                 ]
                 next_dir_id = subprocess.check_output(gdrive_args).decode().strip()
-            
+
             # Current directory is not root
             else:
                 gdrive_args = [
@@ -352,19 +362,26 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
 
         # Current directory doesn't exist, we don't have permission to make it
         else:
-            sys.exit(f"Error: destination {dest_dir} is not a directory (case-sensitive)\n"
-                     "Use option \"-p\" to recursively create parent dirs"
+            sys.exit(
+                f"Error: destination {dest_dir} is not a directory (case-sensitive)\n"
+                'Use option "-p" to recursively create parent dirs'
             )
-        
+
         # Update vars for next loop
         curr_dir_id = next_dir_id
         curr_file_list = next_file_list
         curr_dir_count += 1
-    
+
     return next_dir_id
 
 
-def back_up_file(src_dir: str, filename: str, dest_id: str, file_id: str | None, drive_file_create_time: datetime | None) -> None:
+def back_up_file(
+    src_dir: str,
+    filename: str,
+    dest_id: str,
+    file_id: str | None,
+    drive_file_create_time: datetime | None,
+) -> None:
     """Upload or update a local file into Google Drive.
 
     If a file already exists in the directory at dest_id, we check if its last
@@ -394,7 +411,7 @@ def back_up_file(src_dir: str, filename: str, dest_id: str, file_id: str | None,
     """
     if filename == ".DS_Store":
         return
-    
+
     gdrive_path = get_exec_path("gdrive")
     gdrive_args_upload = [
         gdrive_path,
@@ -471,7 +488,9 @@ def get_root_id() -> str:
 
     # Return the root ID if everything went ok
     if root_id is None:
-        sys.exit("Error: Could not save files to Google Drive root directory at this time.")
+        sys.exit(
+            "Error: Could not save files to Google Drive root directory at this time."
+        )
     return root_id
 
 
@@ -505,11 +524,13 @@ def get_exec_path(name: str) -> str:
         search = "which"
     try:
         return subprocess.check_output([search, name]).decode().strip()
-    
+
     # The executable doesn't exist (or at least isn't on PATH)
     except subprocess.CalledProcessError:
-        sys.exit(f"Error: executable {name} not found.\n"
-                 f"Please verify {name} is installed and on PATH.")
+        sys.exit(
+            f"Error: executable {name} not found.\n"
+            f"Please verify {name} is installed and on PATH."
+        )
 
 
 ##########
@@ -522,7 +543,7 @@ def get_exec_path(name: str) -> str:
 parser = argparse.ArgumentParser(
     prog="gdrive-stash",
     description="Quickly and easily upload local files and directories to your Google Drive "
-                "from the command line.",
+    "from the command line.",
 )
 parser.add_argument("-r", "-recursive", action="store_true")
 parser.add_argument("-p", "-makeParents", action="store_true")
