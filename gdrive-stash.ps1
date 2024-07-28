@@ -123,9 +123,10 @@ function Backup-Dir {
     # Get list of files in $srcDir
     $srcFiles = $(Get-LocalFileList $srcDir)
 
-    # Get destId
+    # Get destId and destFiles
     if ($destDirIsId) {
         $destId = $destDir
+        $destFiles = $(Get-DriveFileList $destId)
     } else {
         # Use splatting in case $makeParents isn't passed by calling function
         $params = @{
@@ -134,11 +135,8 @@ function Backup-Dir {
         if ($makeParents) {
             $params.makeParents = $makeParents
         }
-        $destId = $(Resolve-DriveDirId @params)
+        $destId, $destFiles = $(Resolve-DriveDirId @params)
     }
-
-    # Get list of files in $destDir
-    $destFiles = $(Get-DriveFileList $destId)
 
     # Iterate through files
     foreach ($filename in $srcFiles) {
@@ -152,7 +150,12 @@ function Backup-Dir {
             if ($fileId -ne "") {
                 $newDestId = $fileId
             } else {
-                $newDestId = $(gdrive files mkdir --print-only-id --parent $destId $filename)
+                $params = "files", "mkdir", "--print-only-id"
+                if ($destId -ne "") {
+                    $params += "--parent", $destId
+                }
+                $params += $filename
+                $newDestId = $(gdrive $params)
             }
             Backup-Dir "$srcDir\$filename" $newDestId -destDirIsId -recursive
 
@@ -221,6 +224,8 @@ function Get-DriveFileList {
 
     try {
         $params =
+            "files",
+            "list",
             "--field-separator", ":DELIMITER?",
             "--order-by", "name",
             "--skip-header",
@@ -228,7 +233,7 @@ function Get-DriveFileList {
         if ($destId -ne "") {
             $params += "--parent", $destId
         }
-        return $($(gdrive files list $params) -split "`n`r")
+        return $($(gdrive $params) -split "`n`r")
 
     # Catch any invalid IDs
     } catch [System.Management.Automation.RemoteException] {
@@ -313,53 +318,52 @@ function Resolve-DriveDirId {
     the script exits.
 
     .OUTPUTS
-    [string] nextDirId: The Google Drive ID of $destDir.
+    [string] currDirId: The Google Drive ID of $destDir.
+    [string[]] currFileList: List of info about files in dir at currDirId.
 #>
     param (
         [Parameter(Mandatory=$true)][string]$destDir,
         [switch]$makeParents
     )
     $params =
+        "files",
+        "list",
         "--field-separator", ":DELIMITER?",
         "--order-by", "name",
         "--skip-header",
         "--full-name"
-    $currFileList = $($(gdrive files list $params) -split "`n`r")
-    $currDirId = ""  # The return value if $destDir is root
+    $currFileList = $($(gdrive $params) -split "`n`r")
+    $currDirId = $prevDirId = ""  # The return value if $destDir is root
     # Standardize slashes, remove them from ends to simplify splitting
     $dirsInPath = $destDir.Replace("/", "\").TrimStart("\").TrimEnd("\").Split("\")
 
     # Special case -- user requested root dir as $destDir
     if ([string]::IsNullOrEmpty($dirsInPath)) {
-        return $(Get-RootId)
+        return $currDirId, $currFileList
     }
     
-    for ($i=0; $i -lt $dirsInPath.Length; $i++) {
-        $nextDir = $dirsInPath[$i]
+    foreach ($currDir in $dirsInPath) {
         # We only use the first return value ($destId)
-        $nextDirId = $(Get-DriveFileInfo $nextDir ([FileType]::DIR) $currFileList)[0]
+        $currDirId = $(Get-DriveFileInfo $currDir ([FileType]::DIR) $currFileList)[0]
 
         # Directory exists
-        if ($nextDirId -ne "") {
-            if ($i -eq $($dirsInPath.Length - 1)) {
-                break  # Don't need to call gdrive if last dir
-            }
-            $nextFileList = $($(gdrive files list $params --parent $nextDirId) -split "`n`r")
+        if ($currDirId -ne "") {
+            $currFileList = $($(gdrive $params --parent $currDirId) -split "`n`r")
 
         # Directory doesn't exist
         } elseif ($makeParents) {
 
             # Current directory is not root -- make new dir in most recent dir
-            if ($currDirId -ne "") {
-                $nextDirId = $(gdrive files mkdir --parent $currDirId --print-only-id $nextDir)
+            if ($prevDirId -ne "") {
+                $currDirId = $(gdrive files mkdir --parent $prevDirId --print-only-id $currDir)
             
             # Current directory is root -- make new directory in root
             } else {
-                $nextDirId = $(gdrive files mkdir --print-only-id $nextDir)
+                $currDirId = $(gdrive files mkdir --print-only-id $currDir)
             }
 
             # File list is empty, since the new directory is empty
-            $nextFileList = @()
+            $currFileList = @()
 
         } else {
             Write-Output "Error: destination $destDir is not a directory (case-sensitive)"
@@ -367,10 +371,9 @@ function Resolve-DriveDirId {
             exit
         }
 
-        $currDirId = $nextDirId
-        $currFileList = $nextFileList
+        $prevDirId = $currDirId
     }
-    return $nextDirId
+    return $currDirId, $currFileList
 }
 
 
@@ -399,7 +402,8 @@ function Backup-File {
     The name of the file to back up, e.g. myfile.txt.
 
     .PARAMETER destId
-    The Google Drive ID of the folder we are copying files into.
+    The Google Drive ID of the folder we are copying files into. If blank, this
+    means Google Drive's root directory.
 
     .PARAMETER fileId
     The Google Drive ID of the file we are dealing with, if the file already
@@ -412,10 +416,16 @@ function Backup-File {
     param (
         [Parameter(Mandatory=$true)][string]$srcDir,
         [Parameter(Mandatory=$true)][string]$filename,
-        [Parameter(Mandatory=$true)][string]$destId,
+        [string]$destId="",
         [string]$fileId="",
         [string]$driveFileCreateTime=""
     )
+
+    $upload_params = "files", "upload"
+    if ($destId -ne "") {
+        $upload_params += "--parent", $destId
+    }
+    $upload_params += "$srcDir\$filename"
 
     # Pre-existing file
     if ($fileId -ne "") {
@@ -423,34 +433,13 @@ function Backup-File {
             LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss")
         if ($localWriteTime -gt $driveFileCreateTime) {
             gdrive files delete $fileId
-            gdrive files upload --parent $destId "$srcDir\$filename"
+            gdrive $upload_params
         }
 
     # New file
     } else {
-        gdrive files upload --parent $destId "$srcDir\$filename"
+        gdrive $upload_params
     }
-}
-
-
-function Get-RootId {
-<#
-    .SYNOPSIS
-    Return the Google Drive ID of the Drive root directory.
-
-    .DESCRIPTION
-    There's no way to access the root Drive ID directly, so we create a tmp dir
-    in the root, access its parent ID, then delete the temporary directory.
-
-    .OUTPUTS
-    [string]: The root directory's Google Drive ID.
-#>
-    $tmpDirId = $(gdrive files mkdir tmp --print-only-id)
-    $tmpDirInfo = $((gdrive files info $tmpDirId) -split "`n`r")
-    $rootId = $($($tmpDirInfo | findstr "Parents:") -split "Parents: ", 0, "simplematch")[1]
-    # If we don't pass output to Out-Null, it screws up the return value
-    gdrive files delete --recursive $tmpDirId | Out-Null
-    return $rootId
 }
 
 
