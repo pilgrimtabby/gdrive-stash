@@ -45,7 +45,7 @@ Command line args:
     recursive (bool): Tells function to recursively back up subdirectories in
         src_dir. Default is False. Optional.
 
-    make_parents (bool): When enabled, tells Resolve-DriveDirId to create any
+    make_parents (bool): When enabled, tells resolve_drive_dir_id to create any
         directories in dest_dir's path that don't already exist. If this is
         False and dest_dir doesn't exist, the script will exit. Default is
         False. Optional.
@@ -110,13 +110,45 @@ def back_up_dir(
     recursive: bool,
     make_parents: bool,
     dest_dir_is_id: bool,
-) -> None:
-    """Back up a directory (and optionally, its subdirectories) to Google Drive.
+) -> list[subprocess.Popen | None]:
+    """Back up a directory (and optionally its subdirectories) to Google Drive.
 
     Iterates through all non-directory files, calling back_up_file on each one.
     If "recursive" is True, also recursively backs up subdirectories.
-    See module docstring for arg information and examples.
+
+    Args:
+        src_dir (str): The locally stored parent directory of the directory to
+            be backed up. Ex: ~/tools/ (trailing slash optional).
+
+        dest_dir (str): The full path OR the Google Drive ID of the target
+            folder. Files inside srcDir will be copied directly into destDir.
+            Using an ID is faster but the full path is easier to obtain.
+
+            Paths begin with "/" (backslashes are converted to forward slashes
+            in resolve_drive_dir_id). Passing "/" will copy the files in srcDir
+            into Google Drive's root directory. To copy files into a folder
+            called "My Backups" in your drive's root, you would pass destDir as
+            "/My Backups".
+
+        recursive (bool): Tells function to recursively back up subdirectories
+            in src_dir.
+
+        make_parents (bool): When enabled, tells resolve_drive_dir_id to create
+            any directories in dest_dir's path that don't already exist. If
+            this is False and dest_dir doesn't exist, the script will exit.
+
+        dest_dir_is_id (bool): Tells function to treat dest_dir as a Google
+            Drive ID, not a pathname.
+
+    Returns:
+        procs (list[subprocess.Popen | None]): List of all subprocesses spawned
+            by back_up_file and recursive back_up_dir files. This should be
+            used outside the function to wait until all child processes are
+            finished before the script ends.
     """
+    # Store processes so we can wait for them to finish later
+    procs = []
+
     # Get list of files in src_dir
     src_files = get_local_files(src_dir)
 
@@ -156,12 +188,19 @@ def back_up_dir(
             else:
                 new_dest_id = file_id
 
+            # Back up files inside of folder recursively
             new_src = f"{src_dir}/{filename}"
-            back_up_dir(new_src, new_dest_id, True, make_parents, True)
+            new_procs = back_up_dir(new_src, new_dest_id, True, make_parents, True)
+            procs += new_procs
 
         # Back up all other file types directly
         elif file_type == FileType.FILE:
-            back_up_file(src_dir, filename, dest_id, file_id, drive_file_create_time)
+            new_procs = back_up_file(
+                src_dir, filename, dest_id, file_id, drive_file_create_time
+            )
+            procs += new_procs
+
+    return procs
 
 
 def get_local_files(src_dir: str) -> list[str]:
@@ -378,7 +417,7 @@ def back_up_file(
     dest_id: str,
     file_id: str | None,
     drive_file_create_time: datetime | None,
-) -> None:
+) -> list[subprocess.Popen | None]:
     """Upload or update a local file into Google Drive.
 
     If a file already exists in the directory at dest_id, we check if its last
@@ -405,10 +444,21 @@ def back_up_file(
         drive_file_create_time (datetime): The Google Drive creation date
             (upload date) of the file we are dealing with. If None, it is
             assumed the file doesn't exist, and the file is then uploaded.
-    """
-    if filename == ".DS_Store":
-        return
 
+    Returns:
+        list[subprocess.Popen | None]: List of child processes spawned by the
+            function. We return these so we can wait on them later, to assure
+            that we don't terminate the script before the child processes
+            terminate.
+    """
+    # Store processes opened during fn call so we can wait on them later
+    procs = []
+
+    # No need to do anything with these since they're just a nuisance
+    if filename == ".DS_Store":
+        return procs
+
+    # Get gdrive upload arguments
     gdrive_path = get_exec_path("gdrive")
     gdrive_args_upload = [
         gdrive_path,
@@ -419,9 +469,9 @@ def back_up_file(
         gdrive_args_upload += ["--parent", dest_id]
     gdrive_args_upload += [f"{src_dir}/{filename}"]
 
-    # File isn't in Drive yet
+    # Upload file if not in Drive
     if file_id is None:
-        subprocess.Popen(gdrive_args_upload)
+        procs += [subprocess.Popen(gdrive_args_upload)]
 
     # Check if file has been updated since last upload
     else:
@@ -430,11 +480,13 @@ def back_up_file(
         local_tz = datetime.now(timezone.utc).astimezone().tzinfo
         last_write = datetime.fromtimestamp(last_write_raw, local_tz)
 
+        # Delete & re-upload the file if it has been edited since last backup
         if last_write > drive_file_create_time:
-            # Delete & re-upload the file
             gdrive_args_del = [gdrive_path, "files", "delete", file_id]
-            subprocess.Popen(gdrive_args_del)
-            subprocess.Popen(gdrive_args_upload)
+            procs += [subprocess.Popen(gdrive_args_del)]
+            procs += [subprocess.Popen(gdrive_args_upload)]
+
+    return procs
 
 
 def get_file_type(src_dir: str, filename: str):
@@ -504,4 +556,9 @@ if args.src_dir == '"':
 if args.dest_dir == '"':
     args.dest_dir = "/"
 
-back_up_dir(args.src_dir, args.dest_dir, args.r, args.p, args.i)
+# Start all file upload processes
+procs = back_up_dir(args.src_dir, args.dest_dir, args.r, args.p, args.i)
+
+# Wait for all file upload processes to finish before exiting
+for proc in procs:
+    proc.wait()
