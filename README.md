@@ -8,7 +8,9 @@ gdrive-stash is a simple script intended as an addon for [glotlabs's gdrive](htt
 
 This script restores this functionality: any files added or modified in the local directory are updated in Drive; files deleted locally are NOT deleted in Drive, though that functionality could be added fairly easily if there is interest.
 
-The `.py` version of this script works on Windows, Linux, and MacOS. The `.ps1` script has only been tested on Windows and may not be compatible with other platforms.
+This program could likely be much more efficient, but I wrote it for personal use and I'm satisfied with it. Feel free to optimize it if you're feeling motivated.
+
+The `.py` version of this script works on Windows, Linux, and MacOS, and is much faster because it uploads files in parallel. The `.ps1` script has only been tested on Windows and may not be compatible with other platforms.
 
 # Usage
 
@@ -73,4 +75,4 @@ You can get the Google Drive ID of a file by calling `gdrive files list`; the fi
 
 First, make sure that [glotlabs's gdrive tool](https://github.com/glotlabs/gdrive) is downloaded, on your path, and configured with Google OAuth Client credentials (this is easy to do with a basic Google account -- see their [guide](https://github.com/glotlabs/gdrive/blob/main/docs/create_google_api_credentials.md)).
 
-Download `gdrive-stash.ps1` (Windows only) or `gdrive-stash.py` (Windows, Linux, MacOS) and call it from the command prompt, use it in a script, or do whatever you want with it. For easy access, you may want to place it in a folder that's on your path.
+Download `gdrive-stash.ps1` (slow, Windows only) or `gdrive-stash.py` (faster, works on Windows, Linux, and MacOS) and call it from the command prompt, use it in a script, or do whatever you want with it. For easy access, you may want to place it in a folder that's on your path.
