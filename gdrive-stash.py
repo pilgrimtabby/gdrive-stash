@@ -120,14 +120,12 @@ def back_up_dir(
     # Get list of files in src_dir
     src_files = get_local_files(src_dir)
 
-    # Get destId
+    # Get dest_id and dest_files
     if dest_dir_is_id:
         dest_id = dest_dir
+        dest_files = get_drive_file_list(dest_id)
     else:
-        dest_id = resolve_drive_dir_id(dest_dir, make_parents)
-
-    # Get list of files in dest_dir
-    dest_files = get_drive_file_list(dest_id)
+        dest_id, dest_files = resolve_drive_dir_id(dest_dir, make_parents)
 
     # Iterate through files
     for filename in src_files:
@@ -137,7 +135,7 @@ def back_up_dir(
         )
 
         # Either skip or recursively dive into directories, depending on -r
-        if recursive and file_type == FileType.DIR:
+        if file_type == FileType.DIR and recursive:
 
             # Subdir doesn't exist in Google Drive, so we create it
             if file_id is None:
@@ -146,10 +144,10 @@ def back_up_dir(
                     "files",
                     "mkdir",
                     "--print-only-id",
-                    "--parent",
-                    dest_id,
-                    filename,
                 ]
+                if dest_id is not None:
+                    gdrive_args += ["--parent", dest_id]
+                gdrive_args += [filename]
 
                 # Calling `.strip()` removes trailing newline from check_output
                 new_dest_id = subprocess.check_output(gdrive_args).decode().strip()
@@ -297,25 +295,20 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
         "--full-name",
     ]
     curr_file_list = subprocess.check_output(gdrive_args).decode().strip().split("\n")
-    curr_dir_id = None
-    curr_dir_count = 1
+    curr_dir_id = previous_dir_id = None
     # Standardize slash direction and remove leading and trailing slashes
     dirs_in_path = dest_dir.strip("/").split("/")
 
     # Special case -- user requested root dir as dest_dir
     if dirs_in_path == [""]:
-        return get_root_id()
+        return curr_dir_id, curr_file_list
 
     # Get Google Drive ID of each directory in order
-    for next_dir in dirs_in_path:
-        next_dir_id, _ = get_drive_file_info(next_dir, FileType.DIR, curr_file_list)
+    for curr_dir in dirs_in_path:
+        curr_dir_id, _ = get_drive_file_info(curr_dir, FileType.DIR, curr_file_list)
 
         # Next directory exists
-        if next_dir_id is not None:
-            # It's the last directory, we don't need to call gdrive
-            if curr_dir_count == len(dirs_in_path):
-                break
-
+        if curr_dir_id is not None:
             gdrive_args = [
                 gdrive_path,
                 "files",
@@ -325,9 +318,9 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
                 "--skip-header",
                 "--full-name",
                 "--parent",
-                next_dir_id,
+                curr_dir_id,
             ]
-            next_file_list = (
+            curr_file_list = (
                 subprocess.check_output(gdrive_args).decode().strip().split("\n")
             )
 
@@ -335,15 +328,15 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
         elif make_parents:
 
             # Current directory is root
-            if curr_dir_id is None:
+            if previous_dir_id is None:
                 gdrive_args = [
                     gdrive_path,
                     "files",
                     "mkdir",
                     "--print-only-id",
-                    next_dir,
+                    curr_dir,
                 ]
-                next_dir_id = subprocess.check_output(gdrive_args).decode().strip()
+                curr_dir_id = subprocess.check_output(gdrive_args).decode().strip()
 
             # Current directory is not root
             else:
@@ -353,12 +346,12 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
                     "mkdir",
                     "--print-only-id",
                     "--parent",
-                    curr_dir_id,
-                    next_dir,
+                    previous_dir_id,
+                    curr_dir,
                 ]
-                next_dir_id = subprocess.check_output(gdrive_args).decode().strip()
+                curr_dir_id = subprocess.check_output(gdrive_args).decode().strip()
 
-            next_file_list = [""]
+            curr_file_list = [""]
 
         # Current directory doesn't exist, we don't have permission to make it
         else:
@@ -367,12 +360,10 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
                 'Use option "-p" to recursively create parent dirs'
             )
 
-        # Update vars for next loop
-        curr_dir_id = next_dir_id
-        curr_file_list = next_file_list
-        curr_dir_count += 1
+        # Update for next loop
+        previous_dir_id = curr_dir_id
 
-    return next_dir_id
+    return curr_dir_id, curr_file_list
 
 
 def back_up_file(
@@ -417,10 +408,10 @@ def back_up_file(
         gdrive_path,
         "files",
         "upload",
-        "--parent",
-        dest_id,
-        f"{src_dir}/{filename}",
     ]
+    if dest_id is not None:
+        gdrive_args_upload += ["--parent", dest_id]
+    gdrive_args_upload += [f"{src_dir}/{filename}"]
 
     # File isn't in Drive yet
     if file_id is None:
@@ -438,60 +429,6 @@ def back_up_file(
             gdrive_args_del = [gdrive_path, "files", "delete", file_id]
             subprocess.Popen(gdrive_args_del)
             subprocess.Popen(gdrive_args_upload)
-
-
-def get_root_id() -> str:
-    """Return the Google Drive ID of the Drive root directory.
-
-    There's no way to query it directly, so we create a temporary directory
-    in the root, access its parent ID, then delete the temporary directory.
-
-    Returns:
-        root_id (str): The root directory's ID.
-    """
-    # Create tmp directory in root
-    gdrive_path = get_exec_path("gdrive")
-    gdrive_args = [
-        gdrive_path,
-        "files",
-        "mkdir",
-        "tmp",
-        "--print-only-id",
-    ]
-    tmp_dir_id = subprocess.check_output(gdrive_args).decode().strip()
-
-    # Get tmp directory's information
-    gdrive_args = [
-        gdrive_path,
-        "files",
-        "info",
-        tmp_dir_id,
-    ]
-    tmp_dir_info = subprocess.check_output(gdrive_args).decode().strip().split("\n")
-
-    # Extract the root dir's ID
-    root_id = None
-    for line in tmp_dir_info:
-        if "Parents: " in line:
-            root_id = line.split("Parents: ")[1]
-            break
-
-    # Delete the tmp directory by ID
-    gdrive_args = [
-        gdrive_path,
-        "files",
-        "delete",
-        "--recursive",
-        tmp_dir_id,
-    ]
-    subprocess.Popen(gdrive_args)
-
-    # Return the root ID if everything went ok
-    if root_id is None:
-        sys.exit(
-            "Error: Could not save files to Google Drive root directory at this time."
-        )
-    return root_id
 
 
 def get_file_type(src_dir: str, filename: str):
