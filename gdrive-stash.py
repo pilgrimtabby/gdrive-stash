@@ -267,12 +267,16 @@ def get_drive_file_info(
     return None, None
 
 
-def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
+def resolve_drive_dir_id(
+    dest_dir: str, make_parents: bool
+) -> tuple[Union[str, None], Union[list[str], None]]:
     """Get (or create) the Google Drive ID for a directory.
 
-    Crawls the path dest_dir to its last dir and returns its Google Drive ID.
+    Crawls the path dest_dir to its last dir and returns its Google Drive ID,
+    and the list of files inside that directory.
+
     If the path doesn't exist and make_parents is True, then all missing
-    directories are created in Google Drive.
+    directories on the path are created in Google Drive.
 
     Args:
         dest_dir (str): The directory whose ID is extracted.
@@ -281,8 +285,10 @@ def resolve_drive_dir_id(dest_dir: str, make_parents: bool) -> Union[str, None]:
             script exits.
 
     Returns:
-        next_dir_id (str | None): The Google Drive ID of the directory. If the
+        curr_dir_id (str | None): The Google Drive ID of the directory. If the
             directory is Google Drive's root directory, returns None.
+        curr_file_list (list[str] | None): The list of files inside dest_dir.
+            This is an empty list if the directory is empty (or newly created).
     """
     gdrive_path = get_exec_path("gdrive")
     gdrive_args = [
